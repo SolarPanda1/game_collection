@@ -1,5 +1,6 @@
 import pygame
 from os import path
+from copy import deepcopy
 img_dir = path.join(path.dirname(__file__), 'images')
 pygame.init()
 mainClock = pygame.time.Clock()
@@ -7,7 +8,6 @@ WINDOWWIDTH = 400
 WINDOWHEIGHT = 500
 windowSurface = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT), 0, 32)
 pygame.display.set_caption('Chess')
-run = True
 COLOR1 = (102, 51, 0)
 COLOR2 = (204, 102, 0)
 WHITE = (255,255,255)
@@ -16,7 +16,25 @@ font1 = pygame.font.SysFont('comicsans', 30, True)
 text_image = None
 FPS = 27
 
-print()
+class Board(list):
+    def __init__(self, *args, **kwargs):
+        if len(args) == 1 and hasattr(args[0], '__iter__'):
+            super().__init__(args[0])
+        else:
+            super().__init__(args)
+        self.__dict__.update(kwargs)
+    def __call__(self,**kwargs):
+        self.__dict__.update(kwargs)
+        return self
+    def copy(self):
+        return deepcopy(self)
+    def __setitem__(self, key, value):
+        return super().__setitem__(key, value)
+    def __setitem__(self,key,value):
+        print(super().__getitem__(key[0]))
+        super().__getitem__(key[0]).__setitem__(key[1], value)
+
+
 class Color:
     def __init__(self, color1, turn):
         self.color = color1
@@ -29,7 +47,7 @@ class Color:
         self.enemy = None
 
     def add_pieces(self, name, type, x, y, state, display):
-        piece = Piece(name, type, x, y, state, self.color, display)
+        piece = Piece(name, type, x, y, state, self.color, display, self.enemy)
         self.pieces[name] = piece
 
     def move(self, selection):
@@ -57,7 +75,8 @@ class Color:
                 self.destination = selection
                 self.selection_phase = True
                 self.destination_phase = False
-                self.selected_piece.move(self.destination, self.enemy)
+                self.selected_piece.move(self.destination)
+                self.selected_piece.shrink()
                 self.turn = False
                 self.enemy.turn = True
             else:
@@ -68,10 +87,66 @@ class Color:
             if [self.pieces["king"].y, self.pieces["king"].x] in j.get_list_of_moves():
                 return True
         return False
-
+    
+    def check_all_moves(self):
+        #checks for all moves by a piece, whether valid or not
+        for piece in self.pieces.values():
+            for possible_position in piece.get_list_of_moves():
+                yield piece, possible_position
+    '''
+    def check_filter(self, piece, possible_position):
+        #Returns true if move by a piece results in a check
+        temp = board[possible_position[0]][possible_position[1]]
+        pos = [piece.y, piece.x]
+        piece.y, piece.x = possible_position[0], possible_position[1]
+        board[possible_position[0]][possible_position[1]] = piece
+        board[pos[0]][pos[1]] = 0
+        am_i_checked = self.checked()
+        board[possible_position[0]][possible_position[1]] = temp
+        piece.y, piece.x = pos[0], pos[1]
+        board[pos[0]][pos[1]] = piece
+        if am_i_checked:
+            return True
+        else:           
+            return False
+    '''
+    def check_filter(self, piece, possible_position):
+        #Returns true if move by a piece results in a check
+        eaten, name_of_eaten_piece, initial_state, initial_position = piece.remember_move(possible_position)
+        am_i_checked = self.checked()
+        piece.restore_move(eaten, name_of_eaten_piece, initial_state, initial_position)
+        if am_i_checked:
+            return True
+        else:           
+            return False
+    def checkmate(self):
+        for piece, possible_position in self.check_all_moves():
+            if not self.check_filter(piece, possible_position):             
+                return False
+        return True
+'''
+    def checkmate(self):
+        list_of_pieces = self.pieces.values()
+        for piece in list_of_pieces:
+            for possible_position in piece.get_list_of_moves():
+                temp = board[possible_position[0]][possible_position[1]]
+                pos = [piece.y, piece.x]
+                piece.y, piece.x = possible_position[0], possible_position[1]
+                board[possible_position[0]][possible_position[1]] = piece
+                board[pos[0]][pos[1]] = 0
+                if not self.checked():
+                    board[possible_position[0]][possible_position[1]] = temp
+                    piece.y, piece.x = pos[0], pos[1]
+                    board[pos[0]][pos[1]] = piece
+                    return False
+                board[possible_position[0]][possible_position[1]] = temp
+                piece.y, piece.x = pos[0], pos[1]
+                board[pos[0]][pos[1]] = piece
+        return True
+'''
 
 class Piece:
-    def __init__(self, name, type, x, y, state, color, display):
+    def __init__(self, name, type, x, y, state, color, display, enemy):
         self.name = name
         self.type = type
         self.x = x
@@ -79,6 +154,7 @@ class Piece:
         self.state = state
         self.color = color
         self.display = pygame.transform.scale(pygame.image.load(path.join(img_dir,display)), (50,50))
+        self.enemy = enemy
 
     def expand(self):
         self.display = pygame.transform.smoothscale(self.display, (60, 60))
@@ -86,15 +162,48 @@ class Piece:
     def shrink(self):
         self.display = pygame.transform.smoothscale(self.display, (50, 50))
 
-    def move(self, destination, enemy):
+    def move(self, destination):
         temp = [self.y, self.x]
         self.y, self.x = destination[0], destination[1]
-        if getattr(board[destination[0]][destination[1]], "color", None) == enemy.color:
-            enemy.pieces.pop(board[destination[0]][destination[1]].name)
+        if getattr(board[destination[0]][destination[1]], "color", None) == self.enemy.color:
+            self.enemy.pieces.pop(board[destination[0]][destination[1]].name)
         board[destination[0]][destination[1]] = self
         board[temp[0]][temp[1]] = 0
-        self.shrink()
         self.state = False
+    '''
+        temp = board[possible_position[0]][possible_position[1]]
+        pos = [piece.y, piece.x]
+        piece.y, piece.x = possible_position[0], possible_position[1]
+        board[possible_position[0]][possible_position[1]] = piece
+        board[pos[0]][pos[1]] = 0
+        am_i_checked = self.checked()
+        board[possible_position[0]][possible_position[1]] = temp
+        piece.y, piece.x = pos[0], pos[1]
+        board[pos[0]][pos[1]] = piece
+    '''
+    def remember_move(self, destination):
+        initial_state = self.state
+        initial_position = [self.y, self.x]
+        self.y, self.x = destination[0], destination[1]
+        if getattr(board[destination[0]][destination[1]], "color", None) == self.enemy.color:
+            name_of_eaten_piece = board[destination[0]][destination[1]].name
+            eaten = self.enemy.pieces.pop(board[destination[0]][destination[1]].name)
+            print(eaten)
+        else:
+            eaten, name_of_eaten_piece = 0, None
+        board[destination[0]][destination[1]] = self
+        board[initial_position[0]][initial_position[1]] = 0
+        self.state = False
+        return eaten, name_of_eaten_piece, initial_state, initial_position
+    
+    def restore_move(self, eaten, name_of_eaten_piece, initial_state, initial_position):
+        self.state = initial_state
+        if getattr(eaten, "color", None) == self.enemy.color:
+            self.enemy.pieces[name_of_eaten_piece] = eaten
+        board[self.y][self.x] = eaten
+        self.y, self.x = initial_position[0], initial_position[1]
+        board[initial_position[0]][initial_position[1]] = self
+
 
     def get_list_of_moves(self):
         list_of_moves = []
@@ -106,9 +215,9 @@ class Piece:
         def append_moves(piece, place):
             if place[0] in range(8) and place[1] in range(8):
                 target = board[place[0]][place[1]]
-                if hasattr(target, "color") and target.color != piece.color:
-                    list_of_moves.append(place)
-                elif target == 0:
+                condition1= hasattr(target, "color") and target.color != piece.color
+                condition2 = target == 0
+                if condition1 or condition2:
                     list_of_moves.append(place)
             return [piece.y, piece.x].copy()
 
@@ -149,7 +258,7 @@ class Piece:
                         if position[j] > 7 or position[j] < -7:
                             position = [self.y, self.x].copy()
                             break
-                        if get_square_color([position[0], position[1]]) == self.color:
+                        if get_square_color(position) == self.color:
                             position = [self.y, self.x].copy()
                             break
                         append_moves(self, position)
@@ -169,7 +278,7 @@ class Piece:
                         if position[1] > 7 or position[1] < -7:
                             position = [self.y, self.x].copy()
                             break
-                        if get_square_color([position[0], position[1]]) == self.color:
+                        if get_square_color(position) == self.color:
                             position = [self.y, self.x].copy()
                             break
                         append_moves(self, position)
@@ -192,26 +301,6 @@ class Piece:
                     position = [self.y, self.x].copy()
         return list_of_moves
 
-
-def checkmate(n):
-    list = n.pieces.values()
-    for piece in list:
-        for possible_position in piece.get_list_of_moves():
-            temp = board[possible_position[0]][possible_position[1]]
-            pos = [piece.y, piece.x]
-            piece.y, piece.x = possible_position[0], possible_position[1]
-            board[possible_position[0]][possible_position[1]] = piece
-            board[pos[0]][pos[1]] = 0
-            check = n.checked()
-            if not check:
-                board[possible_position[0]][possible_position[1]] = temp
-                piece.y, piece.x = pos[0], pos[1]
-                board[pos[0]][pos[1]] = piece
-                return False
-            board[possible_position[0]][possible_position[1]] = temp
-            piece.y, piece.x = pos[0], pos[1]
-            board[pos[0]][pos[1]] = piece
-    return True
 
 # Graphics
 def print_text(text):
@@ -277,13 +366,13 @@ while True:
             if 0<mouse_position[0]<400 and 0<mouse_position[1]<400:
                 selected_square = [mouse_position[1] // 50, mouse_position[0] // 50]
                 if white.turn:
-                    if not checkmate(white):
+                    if not white.checkmate():
                         white.move(selected_square)
                     else:
                         print_text("Checkmate, black win")
                         white.turn, black.turn = False, False
                 elif black.turn:
-                    if not checkmate(black):
+                    if not black.checkmate():
                         black.move(selected_square)
                     else:
                         print_text("Checkmate, white win")
