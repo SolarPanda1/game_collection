@@ -22,16 +22,11 @@ class Board(list):
             super().__init__(args[0])
         else:
             super().__init__(args)
-        self.__dict__.update(kwargs)
-    def __call__(self,**kwargs):
-        self.__dict__.update(kwargs)
-        return self
     def copy(self):
         return deepcopy(self)
-    def __setitem__(self, key, value):
-        return super().__setitem__(key, value)
+    def __getitem__(self, index):
+        return super().__getitem__(index[0]).__getitem__(index[1])
     def __setitem__(self,key,value):
-        print(super().__getitem__(key[0]))
         super().__getitem__(key[0]).__setitem__(key[1], value)
 
 
@@ -89,7 +84,7 @@ class Color:
         return False
     
     def check_all_moves(self):
-        #checks for all moves by a piece, whether valid or not
+        #checks for all moves by all pieces, whether valid or not
         for piece in self.pieces.values():
             for possible_position in piece.get_list_of_moves():
                 yield piece, possible_position
@@ -119,9 +114,10 @@ class Color:
             return True
         else:           
             return False
+        
     def checkmate(self):
         for piece, possible_position in self.check_all_moves():
-            if not self.check_filter(piece, possible_position):             
+            if not self.check_filter(piece, possible_position):          
                 return False
         return True
 '''
@@ -188,7 +184,6 @@ class Piece:
         if getattr(board[destination[0]][destination[1]], "color", None) == self.enemy.color:
             name_of_eaten_piece = board[destination[0]][destination[1]].name
             eaten = self.enemy.pieces.pop(board[destination[0]][destination[1]].name)
-            print(eaten)
         else:
             eaten, name_of_eaten_piece = 0, None
         board[destination[0]][destination[1]] = self
@@ -208,7 +203,10 @@ class Piece:
     def get_list_of_moves(self):
         list_of_moves = []
         position = [self.y, self.x].copy()
-
+        '''
+        condition1= hasattr(target, "color") and target.color != piece.color
+        condition2 = target == 0
+        '''
         def get_square_color(place):
             return getattr(board[place[0]][place[1]], "color", None)
 
@@ -218,9 +216,9 @@ class Piece:
                 condition1= hasattr(target, "color") and target.color != piece.color
                 condition2 = target == 0
                 if condition1 or condition2:
-                    list_of_moves.append(place)
+                    list_of_moves.append(place.copy())
             return [piece.y, piece.x].copy()
-
+        '''
         if self.type == "pawn":
             if self.color == "white":
                 e = -1
@@ -239,7 +237,32 @@ class Piece:
                     if hasattr(diagonal_target, "color") and diagonal_target.color != self.color:
                         list_of_moves.append(position)
                     position = [self.y, self.x].copy()
-
+            '''
+        if self.type == "pawn":
+            if self.color == "white":
+                e = -1
+            else:
+                e = 1
+            if self.state:
+                position[0] += 2*e
+                target = board[position[0]][position[1]]
+                if target == 0:
+                    append_moves(self, position)
+            position = [self.y, self.x].copy()
+            position[0] += e
+            target = board[position[0]][position[1]]
+            if target == 0:
+                append_moves(self, position)
+            position = [self.y, self.x].copy()
+            for i in [-1,1]:
+                position[0] += e
+                position[1] += i
+                if position[0] in range(8) and position[1] in range(8):
+                    diagonal_target = board[position[0]][position[1]]
+                    if hasattr(diagonal_target, "color") and diagonal_target.color != self.color:
+                        list_of_moves.append(position)
+                position = [self.y, self.x].copy()
+            
         if self.type == "king":
             for i in [-1, 1]:
                 for j in [0, 1]:
