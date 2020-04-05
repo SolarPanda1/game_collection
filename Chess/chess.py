@@ -16,8 +16,9 @@ font1 = pygame.font.SysFont('comicsans', 30, True)
 text_image = None
 FPS = 27
 
+
 class Board(list):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args):
         if len(args) == 1 and hasattr(args[0], '__iter__'):
             super().__init__(args[0])
         else:
@@ -25,7 +26,10 @@ class Board(list):
     def copy(self):
         return deepcopy(self)
     def __getitem__(self, index):
-        return super().__getitem__(index[0]).__getitem__(index[1])
+        if type(index) == int:           
+           return super().__getitem__(index)
+        else:
+            return super().__getitem__(index[0]).__getitem__(index[1])
     def __setitem__(self,key,value):
         super().__getitem__(key[0]).__setitem__(key[1], value)
 
@@ -46,7 +50,7 @@ class Color:
         self.pieces[name] = piece
 
     def move(self, selection):
-        selected_piece = board[selection[0]][selection[1]]
+        selected_piece = board[selection]
         if self.selection_phase:
             if not isinstance(selected_piece, Piece):
                 print_text('No piece selected. Please reselect')
@@ -88,23 +92,7 @@ class Color:
         for piece in self.pieces.values():
             for possible_position in piece.get_list_of_moves():
                 yield piece, possible_position
-    '''
-    def check_filter(self, piece, possible_position):
-        #Returns true if move by a piece results in a check
-        temp = board[possible_position[0]][possible_position[1]]
-        pos = [piece.y, piece.x]
-        piece.y, piece.x = possible_position[0], possible_position[1]
-        board[possible_position[0]][possible_position[1]] = piece
-        board[pos[0]][pos[1]] = 0
-        am_i_checked = self.checked()
-        board[possible_position[0]][possible_position[1]] = temp
-        piece.y, piece.x = pos[0], pos[1]
-        board[pos[0]][pos[1]] = piece
-        if am_i_checked:
-            return True
-        else:           
-            return False
-    '''
+
     def check_filter(self, piece, possible_position):
         #Returns true if move by a piece results in a check
         eaten, name_of_eaten_piece, initial_state, initial_position = piece.remember_move(possible_position)
@@ -120,26 +108,6 @@ class Color:
             if not self.check_filter(piece, possible_position):          
                 return False
         return True
-'''
-    def checkmate(self):
-        list_of_pieces = self.pieces.values()
-        for piece in list_of_pieces:
-            for possible_position in piece.get_list_of_moves():
-                temp = board[possible_position[0]][possible_position[1]]
-                pos = [piece.y, piece.x]
-                piece.y, piece.x = possible_position[0], possible_position[1]
-                board[possible_position[0]][possible_position[1]] = piece
-                board[pos[0]][pos[1]] = 0
-                if not self.checked():
-                    board[possible_position[0]][possible_position[1]] = temp
-                    piece.y, piece.x = pos[0], pos[1]
-                    board[pos[0]][pos[1]] = piece
-                    return False
-                board[possible_position[0]][possible_position[1]] = temp
-                piece.y, piece.x = pos[0], pos[1]
-                board[pos[0]][pos[1]] = piece
-        return True
-'''
 
 class Piece:
     def __init__(self, name, type, x, y, state, color, display, enemy):
@@ -147,7 +115,7 @@ class Piece:
         self.type = type
         self.x = x
         self.y = y
-        self.state = state
+        self.state = state #True if piece has not moved
         self.color = color
         self.display = pygame.transform.scale(pygame.image.load(path.join(img_dir,display)), (50,50))
         self.enemy = enemy
@@ -161,33 +129,23 @@ class Piece:
     def move(self, destination):
         temp = [self.y, self.x]
         self.y, self.x = destination[0], destination[1]
-        if getattr(board[destination[0]][destination[1]], "color", None) == self.enemy.color:
-            self.enemy.pieces.pop(board[destination[0]][destination[1]].name)
-        board[destination[0]][destination[1]] = self
-        board[temp[0]][temp[1]] = 0
+        if getattr(board[destination], "color", None) == self.enemy.color:
+            self.enemy.pieces.pop(board[destination].name)
+        board[destination] = self
+        board[temp] = 0
         self.state = False
-    '''
-        temp = board[possible_position[0]][possible_position[1]]
-        pos = [piece.y, piece.x]
-        piece.y, piece.x = possible_position[0], possible_position[1]
-        board[possible_position[0]][possible_position[1]] = piece
-        board[pos[0]][pos[1]] = 0
-        am_i_checked = self.checked()
-        board[possible_position[0]][possible_position[1]] = temp
-        piece.y, piece.x = pos[0], pos[1]
-        board[pos[0]][pos[1]] = piece
-    '''
+
     def remember_move(self, destination):
         initial_state = self.state
         initial_position = [self.y, self.x]
         self.y, self.x = destination[0], destination[1]
-        if getattr(board[destination[0]][destination[1]], "color", None) == self.enemy.color:
-            name_of_eaten_piece = board[destination[0]][destination[1]].name
-            eaten = self.enemy.pieces.pop(board[destination[0]][destination[1]].name)
+        if getattr(board[destination], "color", None) == self.enemy.color:
+            name_of_eaten_piece = board[destination].name
+            eaten = self.enemy.pieces.pop(board[destination].name)
         else:
             eaten, name_of_eaten_piece = 0, None
-        board[destination[0]][destination[1]] = self
-        board[initial_position[0]][initial_position[1]] = 0
+        board[destination] = self
+        board[initial_position] = 0
         self.state = False
         return eaten, name_of_eaten_piece, initial_state, initial_position
     
@@ -197,28 +155,33 @@ class Piece:
             self.enemy.pieces[name_of_eaten_piece] = eaten
         board[self.y][self.x] = eaten
         self.y, self.x = initial_position[0], initial_position[1]
-        board[initial_position[0]][initial_position[1]] = self
+        board[initial_position] = self
 
+    def valid_move_filter(self, place):
+        if place[0] in range(8) and place[1] in range(8):
+                target = board[place]
+                condition1= hasattr(target, "color") and target.color != self.color
+                condition2 = target == 0
+                if condition1 or condition2:
+                    return True
+        return False
 
     def get_list_of_moves(self):
         list_of_moves = []
         position = [self.y, self.x].copy()
-        '''
-        condition1= hasattr(target, "color") and target.color != piece.color
-        condition2 = target == 0
-        '''
+
         def get_square_color(place):
-            return getattr(board[place[0]][place[1]], "color", None)
+            return getattr(board[place], "color", None)
 
         def append_moves(piece, place):
             if place[0] in range(8) and place[1] in range(8):
-                target = board[place[0]][place[1]]
+                target = board[place]
                 condition1= hasattr(target, "color") and target.color != piece.color
                 condition2 = target == 0
                 if condition1 or condition2:
                     list_of_moves.append(place.copy())
             return [piece.y, piece.x].copy()
-        '''
+ 
         if self.type == "pawn":
             if self.color == "white":
                 e = -1
@@ -226,31 +189,12 @@ class Piece:
                 e = 1
             if self.state:
                 position[0] += 2*e
-                position = append_moves(self, position)
-            position[0] += e
-            position = append_moves(self, position)
-            for i in [-1,1]:
-                position[0] += e
-                position[1] += i
-                if position[0] in range(8) and position[1] in range(8):
-                    diagonal_target = board[position[0]][position[1]]
-                    if hasattr(diagonal_target, "color") and diagonal_target.color != self.color:
-                        list_of_moves.append(position)
-                    position = [self.y, self.x].copy()
-            '''
-        if self.type == "pawn":
-            if self.color == "white":
-                e = -1
-            else:
-                e = 1
-            if self.state:
-                position[0] += 2*e
-                target = board[position[0]][position[1]]
+                target = board[position]
                 if target == 0:
                     append_moves(self, position)
             position = [self.y, self.x].copy()
             position[0] += e
-            target = board[position[0]][position[1]]
+            target = board[position]
             if target == 0:
                 append_moves(self, position)
             position = [self.y, self.x].copy()
@@ -258,7 +202,7 @@ class Piece:
                 position[0] += e
                 position[1] += i
                 if position[0] in range(8) and position[1] in range(8):
-                    diagonal_target = board[position[0]][position[1]]
+                    diagonal_target = board[position]
                     if hasattr(diagonal_target, "color") and diagonal_target.color != self.color:
                         list_of_moves.append(position)
                 position = [self.y, self.x].copy()
@@ -285,7 +229,7 @@ class Piece:
                             position = [self.y, self.x].copy()
                             break
                         append_moves(self, position)
-                        if board[position[0]][position[1]] != 0:
+                        if board[position] != 0:
                             position = [self.y, self.x].copy()
                             break
                         position = [self.y, self.x].copy()
@@ -305,7 +249,7 @@ class Piece:
                             position = [self.y, self.x].copy()
                             break
                         append_moves(self, position)
-                        if board[position[0]][position[1]] != 0:
+                        if board[position] != 0:
                             position = [self.y, self.x].copy()
                             break
                         position = [self.y, self.x].copy()
@@ -323,7 +267,6 @@ class Piece:
                     append_moves(self, position)
                     position = [self.y, self.x].copy()
         return list_of_moves
-
 
 # Graphics
 def print_text(text):
@@ -348,13 +291,7 @@ def redrawGameWindow():
         windowSurface.blit(text_image, (0, 400))
     pygame.display.update()
 
-
-board = []
-for i in range(8):
-    board.append([])
-    for j in range(8):
-        board[i].append(0)
-
+board = Board([[0 for j in range(8)] for i in range(8)])
 black = Color("black", False)
 white = Color("white", True)
 black.enemy = white
